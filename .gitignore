@@ -1,0 +1,7 @@
+node_modules/
+dist/
+deploy/
+github-upload/
+.DS_Store
+*.log
+.vite/

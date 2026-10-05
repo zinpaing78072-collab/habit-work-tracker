@@ -1,0 +1,25 @@
+{
+  "name": "habit-work-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only personal habit and work tracker PWA",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/make-icons.mjs",
+    "verify": "esbuild scripts/verify.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=error && node node_modules/.cache/verify.mjs",
+    "smoke": "node scripts/smoke.mjs && node scripts/smoke2.mjs && node scripts/smoke3.mjs",
+    "test": "npm run typecheck && npm run verify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vite-plugin-pwa": "^0.20.5"
+  }
+}
