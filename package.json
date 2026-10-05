@@ -12,6 +12,9 @@
     "icons": "node scripts/make-icons.mjs",
     "verify": "esbuild scripts/verify.mjs --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=error && node node_modules/.cache/verify.mjs",
     "smoke": "node scripts/smoke.mjs && node scripts/smoke2.mjs && node scripts/smoke3.mjs",
+    "smoke:safearia": "node scripts/check-safe-area.mjs",
+    "smoke:subpath": "node scripts/check-subpath.mjs",
+    "smoke:live": "node scripts/check-live.mjs",
     "test": "npm run typecheck && npm run verify"
   },
   "keywords": [],

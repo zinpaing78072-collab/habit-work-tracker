@@ -170,7 +170,9 @@ check("custom habit added to the file list", (await js(`document.querySelectorAl
 await js(clickTab("Today"));
 await sleep(600);
 check("today now shows 10 cards", await js(`${$$(".card")}.length`), 10);
-check("count strip reflects 10 habits", await js(`${$(".count strong")}.textContent`), "1 of 10 logged");
+// The numerator depends on whether today itself has seeded data, so assert the
+// denominator (the new habit was added) and the shape of the string.
+check("count strip reflects 10 habits", await js(`${$(".count strong")}.textContent.endsWith("of 10 logged")`), true);
 check("new habit card present", await js(`!!${cardByName("Push-ups")}`), true);
 check("new habit has no active goal", await js(`(${cardByName("Push-ups")}).querySelector(".goal").textContent.includes("No active goal")`), true);
 
