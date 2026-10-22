@@ -38,6 +38,7 @@ export function defaultState(): AppState {
     view: "today",
     editingDate: today,
     editingHabitSlug: null,
+    editingGroupSlug: null,
     historyFrom: addDays(today, -29),
     historyTo: today,
     seedNoticeDismissed: false,
@@ -143,6 +144,10 @@ export function setView(state: AppState, view: View): AppState {
 
 export function setEditingHabit(state: AppState, slug: string | null): AppState {
   return { ...state, editingHabitSlug: slug };
+}
+
+export function setEditingGroup(state: AppState, slug: string | null): AppState {
+  return { ...state, editingGroupSlug: slug };
 }
 
 export function setSettings(state: AppState, patch: Partial<Settings>): AppState {

@@ -1,9 +1,10 @@
 import type { AppState, Group, Goal, Habit } from "../types";
-import { activeHabits, deleteActiveGoal, setGroupCollapsed, upsertGoal, upsertHabit } from "../db";
+import { activeHabits, deleteActiveGoal, setEditingGroup, setGroupCollapsed, upsertGoal, upsertHabit } from "../db";
 import { completedGoalsFor, progressFor } from "../progress";
 import { formatDayLabel, isValidISODate, todayISORange } from "../day";
 import { el, on } from "../dom";
 import { labelled, sectionTitle } from "./history";
+import { editingGroupOverlay } from "./today";
 
 /** Goals: one active goal per habit; active goals recalculate freely (Q12/D). */
 export function renderGoals(state: AppState, rerender: (s: AppState) => void, toast: (m: string) => void): HTMLElement {
@@ -43,6 +44,11 @@ export function renderGoals(state: AppState, rerender: (s: AppState) => void, to
     }
   }
 
+  if (state.editingGroupSlug) {
+    const group = state.groups.find((g) => g.slug === state.editingGroupSlug);
+    if (group) root.append(editingGroupOverlay(state, group, rerender, toast));
+  }
+
   return root;
 }
 
@@ -77,6 +83,14 @@ function groupCard(
       rerender(setGroupCollapsed(state, group.slug));
     });
     head.append(toggle);
+
+    const edit = el("button", "btn btn-ghost btn-small", "✎");
+    edit.setAttribute("aria-label", `Edit ${group.name}`);
+    on(edit, "click", (ev) => {
+      ev.stopPropagation();
+      rerender(setEditingGroup(state, group.slug));
+    });
+    head.append(edit);
   }
   card.append(head);
 

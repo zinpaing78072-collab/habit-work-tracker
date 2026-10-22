@@ -1,5 +1,5 @@
 import type { AppState, Group, Habit } from "../types";
-import { activeHabits, setEntry, setEditingHabit, setGroupCollapsed, upsertHabit } from "../db";
+import { activeHabits, setEditingGroup, setEntry, setEditingHabit, setGroupCollapsed, upsertGroup, upsertHabit } from "../db";
 import { allGreenToday, isLoggedOn, loggedCount, progressFor, todayTone, valueOn } from "../progress";
 import { addDays, daysBetween, formatDayLabel, formatLongDayLabel, logicalToday } from "../day";
 import { el, fmtValue, on, slugify } from "../dom";
@@ -86,9 +86,12 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
     }
   }
 
-  /* ---- edit overlay for tapped card ---- */
+  /* ---- edit overlay for tapped card / group card ---- */
   if (editingHabit) {
     root.append(editingHabitOverlay(state, editingHabit, rerender, toast));
+  } else if (state.editingGroupSlug) {
+    const group = state.groups.find((g) => g.slug === state.editingGroupSlug);
+    if (group) root.append(editingGroupOverlay(state, group, rerender, toast));
   }
 
   /* ---- all-green export prompt (Q14) ---- */
@@ -136,6 +139,14 @@ function groupCard(
       rerender(setGroupCollapsed(state, group.slug));
     });
     head.append(toggle);
+
+    const edit = el("button", "btn btn-ghost btn-small", "✎");
+    edit.setAttribute("aria-label", `Edit ${group.name}`);
+    on(edit, "click", (ev) => {
+      ev.stopPropagation();
+      rerender(setEditingGroup(state, group.slug));
+    });
+    head.append(edit);
   }
   card.append(head);
 
@@ -328,6 +339,17 @@ function editingHabitOverlay(
   name.setAttribute("aria-label", "Habit name");
   panel.append(labelled("Name", name));
 
+  const groupSelect = el("select", "textinput") as HTMLSelectElement;
+  groupSelect.append(el("option", null, "Ungrouped"));
+  groupSelect.value = habit.groupSlug ?? "";
+  for (const g of state.groups.filter((g) => !g.archived)) {
+    const opt = el("option", null, g.name) as HTMLOptionElement;
+    opt.value = g.slug;
+    if (g.slug === habit.groupSlug) opt.selected = true;
+    groupSelect.append(opt);
+  }
+  panel.append(labelled("Group", groupSelect));
+
   const unit = el("input", "textinput") as HTMLInputElement;
   unit.type = "text";
   unit.value = habit.unit;
@@ -365,7 +387,7 @@ function editingHabitOverlay(
         : [],
       order: habit.order,
       archived: habit.archived,
-      groupSlug: habit.groupSlug,
+      groupSlug: groupSelect.value === "" ? null : groupSelect.value,
     };
     rerender(upsertHabit(state, next));
     toast(`${next.name} saved`);
@@ -378,6 +400,48 @@ function editingHabitOverlay(
 
   panel.append(actions);
 
+  overlay.append(panel);
+  return overlay;
+}
+
+/** Edit overlay for a group card: rename the group. Guarded against "Ungrouped" (slug ""). */
+export function editingGroupOverlay(
+  state: AppState,
+  group: Group,
+  rerender: (s: AppState) => void,
+  toast: (m: string) => void,
+): HTMLElement {
+  const overlay = el("div", "edit-overlay");
+  on(overlay, "click", (ev) => {
+    if (ev.target === overlay) rerender(setEditingGroup(state, null));
+  });
+
+  const panel = el("div", "edit-panel");
+  panel.append(el("h2", "edit-panel-title", `Edit ${group.name}`));
+
+  const name = el("input", "textinput") as HTMLInputElement;
+  name.type = "text";
+  name.value = group.name;
+  name.setAttribute("aria-label", "Group name");
+  panel.append(labelled("Group name", name));
+
+  const actions = el("div", "actions");
+
+  const save = el("button", "btn btn-primary btn-block", "Save group") as HTMLButtonElement;
+  on(save, "click", () => {
+    const trimmed = name.value.trim();
+    if (!trimmed) return toast("Give the group a name");
+    const next: Group = { ...group, name: trimmed };
+    rerender(setEditingGroup(upsertGroup(state, next), null));
+    toast(`Group "${trimmed}" saved`);
+  });
+  actions.append(save);
+
+  const cancel = el("button", "btn btn-ghost btn-block", "Cancel") as HTMLButtonElement;
+  on(cancel, "click", () => rerender(setEditingGroup(state, null)));
+  actions.append(cancel);
+
+  panel.append(actions);
   overlay.append(panel);
   return overlay;
 }
