@@ -1,7 +1,7 @@
 import type { AppState, Habit } from "../types";
-import { activeHabits, setEntry } from "../db";
+import { activeHabits, setEntry, setEditingHabit } from "../db";
 import { allGreenToday, isLoggedOn, loggedCount, progressFor, todayTone, valueOn } from "../progress";
-import { addDays, formatDayLabel, formatLongDayLabel, logicalToday } from "../day";
+import { addDays, daysBetween, formatDayLabel, formatLongDayLabel, logicalToday } from "../day";
 import { el, fmtValue, on } from "../dom";
 
 /** Today screen: the daily driver (Q1/Q2/Q3/Q9/Q20/Q21/Q22). */
@@ -13,12 +13,13 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   const habits = activeHabits(state);
   const logged = loggedCount(state, date, habits);
   const done = allGreenToday(state, date);
+  const editingHabit = state.editingHabitSlug ? habits.find((h) => h.slug === state.editingHabitSlug) : undefined;
 
   /* ---- date navigation, enabling backdating (Q4/B) ---- */
   const nav = el("div", "datenav");
   const prev = el("button", "navbtn", "‹") as HTMLButtonElement;
   prev.setAttribute("aria-label", "Previous day");
-  on(prev, "click", () => rerender({ ...state, editingDate: addDays(date, -1) }));
+  on(prev, "click", () => rerender(setEditingHabit({ ...state, editingDate: addDays(date, -1) }, null)));
 
   const label = el("div", "navlabel");
   label.append(el("div", "navlabel-main", isToday ? "Today" : formatDayLabel(date)));
@@ -30,7 +31,7 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   next.disabled = date >= today;
   on(next, "click", () => {
     const d = addDays(date, 1);
-    if (d <= today) rerender({ ...state, editingDate: d });
+    if (d <= today) rerender(setEditingHabit({ ...state, editingDate: d }, null));
   });
 
   nav.append(prev, label, next);
@@ -38,7 +39,7 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
 
   if (!isToday) {
     const back = el("button", "btn btn-ghost btn-block", "Back to today") as HTMLButtonElement;
-    on(back, "click", () => rerender({ ...state, editingDate: today }));
+    on(back, "click", () => rerender(setEditingHabit({ ...state, editingDate: today }, null)));
     root.append(back);
   }
 
@@ -48,7 +49,12 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   if (done) count.append(el("span", "count-badge", "All green — good moment to back up"));
   root.append(count);
 
-  for (const habit of habits) root.append(habitCard(state, habit, date, rerender, toast));
+  for (const habit of habits) root.append(habitCard(state, habit, date, today, rerender, toast, state.editingHabitSlug === habit.slug));
+
+  /* ---- edit overlay for tapped card ---- */
+  if (editingHabit) {
+    root.append(editingHabitOverlay(state, editingHabit, date, rerender, toast));
+  }
 
   /* ---- all-green export prompt (Q14) ---- */
   if (done && state.settings.lastExportAt === null) {
@@ -68,15 +74,22 @@ function habitCard(
   state: AppState,
   habit: Habit,
   date: string,
+  today: string,
   rerender: (s: AppState) => void,
   toast: (m: string) => void,
+  isEditing = false,
 ): HTMLElement {
   const tone = todayTone(state, habit, date);
   const value = valueOn(state, habit.slug, date);
   const logged = isLoggedOn(state, habit.slug, date);
   const progress = progressFor(state, habit);
 
-  const card = el("div", `card card-${tone}`);
+  const card = el("div", `card card-${tone}${isEditing ? " card-editing" : ""}`);
+  on(card, "click", (ev) => {
+    const target = ev.target as HTMLElement;
+    if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
+    rerender(setEditingHabit(state, habit.slug));
+  });
 
   const head = el("div", "card-head");
   const nameWrap = el("div", "card-namewrap");
@@ -85,17 +98,45 @@ function habitCard(
   head.append(nameWrap);
 
   // Colour is never the only signal (NFR): a text label accompanies it.
+  // Numeric explicit 0 IS logged (counted in "N of M") — say so, don't claim
+  // "Not logged"; a genuinely absent day still says "Not logged".
   const badge = el("div", `badge badge-${tone}`);
   badge.textContent =
     habit.kind === "binary"
       ? `${tone === "green" ? "●" : "○"} ${value === 1 ? "Success" : logged ? "Fail" : "Not logged"}`
-      : `${tone === "green" ? "●" : "○"} ${tone === "green" ? "Logged" : "Not logged"}`;
+      : `${tone === "green" ? "●" : "○"} ${tone === "green" ? "Logged" : logged ? "Logged 0" : "Not logged"}`;
   head.append(badge);
   card.append(head);
 
   card.append(habitBody(state, habit, date, value, logged, rerender, toast));
   card.append(goalStrip(habit, progress));
+
+  const pace = paceStrip(habit, progress, today);
+  if (pace) card.append(pace);
   return card;
+}
+
+/** Pace strip: units per day needed from today to reach the goal by end date.
+ *  Hidden when there is no active goal, the goal is expired/met, or no days remain.
+ *  Neutral styling — never reuses today's green/red accent. */
+function paceStrip(
+  habit: Habit,
+  progress: ReturnType<typeof progressFor>,
+  today: string,
+): HTMLElement | null {
+  if (!progress.hasGoal || progress.expired || progress.remaining <= 0) return null;
+  if (habit.kind !== "numeric") return null;
+
+  const remainingDays = daysBetween(today, progress.goal!.endDate) + 1;
+  if (remainingDays <= 0) return null;
+
+  const pace = Math.ceil(progress.remaining / remainingDays);
+
+  const g = el("div", "pace");
+  g.append(el("span", null, "Pace:"));
+  g.append(el("strong", "pace-n", String(pace)));
+  g.append(el("span", null, `${habit.unit}/day`));
+  return g;
 }
 
 function habitBody(
@@ -190,6 +231,46 @@ function habitBody(
   }
 
   return body;
+}
+
+/** Full-height overlay for editing a single habit's entry on a given day. */
+function editingHabitOverlay(
+  state: AppState,
+  habit: Habit,
+  date: string,
+  rerender: (s: AppState) => void,
+  toast: (m: string) => void,
+): HTMLElement {
+  const tone = todayTone(state, habit, date);
+  const value = valueOn(state, habit.slug, date);
+  const logged = isLoggedOn(state, habit.slug, date);
+
+  const overlay = el("div", "edit-overlay");
+  on(overlay, "click", (ev) => {
+    if (ev.target === overlay) rerender(setEditingHabit(state, null));
+  });
+
+  const panel = el("div", "edit-panel");
+  panel.append(el("h2", "edit-panel-title", habit.name));
+  if (habit.kind === "numeric" && habit.unit) {
+    panel.append(el("div", "edit-panel-unit", habit.unit));
+  }
+
+  const badge = el("div", `badge badge-${tone}`);
+  badge.textContent =
+    habit.kind === "binary"
+      ? `${tone === "green" ? "●" : "○"} ${value === 1 ? "Success" : logged ? "Fail" : "Not logged"}`
+      : `${tone === "green" ? "●" : "○"} ${tone === "green" ? "Logged" : "Not logged"}`;
+  panel.append(badge);
+
+  panel.append(habitBody(state, habit, date, value, logged, rerender, toast));
+
+  const done = el("button", "btn btn-primary btn-block", "Done") as HTMLButtonElement;
+  on(done, "click", () => rerender(setEditingHabit(state, null)));
+  panel.append(done);
+
+  overlay.append(panel);
+  return overlay;
 }
 
 /** Neutral progress strip (Q9/C): never reuses the today green/red accent. */

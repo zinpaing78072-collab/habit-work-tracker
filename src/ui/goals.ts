@@ -46,7 +46,7 @@ function goalCard(
         `${progress.total} / ${progress.target}${habit.unit ? ` ${habit.unit}` : ""} · ${goal.startDate} → ${goal.endDate}`,
       ),
     );
-    if (progress.expired) card.append(el("div", "panel-note", "Range ended — progress is final; set a new goal to continue."));
+    if (progress.expired) card.append(el("div", "panel-note", "Range ended — set a new goal to continue."));
   } else {
     card.append(el("div", "panel-line", "No active goal."));
   }

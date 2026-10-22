@@ -37,6 +37,7 @@ export function defaultState(): AppState {
     settings: { dayStartHour: DEFAULT_DAY_START_HOUR, lastExportAt: null },
     view: "today",
     editingDate: today,
+    editingHabitSlug: null,
     historyFrom: addDays(today, -29),
     historyTo: today,
     seedNoticeDismissed: false,
@@ -133,6 +134,10 @@ export function deleteActiveGoal(state: AppState, habitSlug: string): AppState {
 
 export function setView(state: AppState, view: View): AppState {
   return { ...state, view };
+}
+
+export function setEditingHabit(state: AppState, slug: string | null): AppState {
+  return { ...state, editingHabitSlug: slug };
 }
 
 export function setSettings(state: AppState, patch: Partial<Settings>): AppState {

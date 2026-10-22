@@ -24,8 +24,11 @@ export type Goal = {
   endDate: string;
   active: boolean;
   /**
-   * Set once the end date passes. Completed goals are locked and immutable
-   * (Q12/D). `result` caches the final progress at completion time.
+   * Set when a goal is deliberately completed and locked (Q12/D). Completed
+   * goals are immutable; `result` caches the final progress at that moment.
+   * NOTE: a goal whose range merely passes is EXPIRED, not completed — it
+   * stays active and editable. See GLOSSARY.md ("Expired goal" vs
+   * "Completed goal").
    */
   completedAt?: string;
   result?: number;
@@ -69,6 +72,8 @@ export type AppState = {
   view: View;
   /** Logical day currently being edited. */
   editingDate: string;
+  /** Habit slug currently being edited via card tap; null when no overlay. */
+  editingHabitSlug: string | null;
   /** History range filter (persisted so it survives re-renders). */
   historyFrom: string;
   historyTo: string;
