@@ -1,19 +1,29 @@
-import type { Entry, Goal, Habit } from "./types";
+import type { Entry, Goal, Group, Habit } from "./types";
 
 /**
  * Default habits, in the order used in the source notes.
  * `unit` is intentionally blank for habits where the notes do not state one.
  */
 export const SEED_HABITS: Habit[] = [
-  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min", steps: [1, 5, 10], order: 0, archived: false },
-  { slug: "self-remembering", name: "Self Remembering", kind: "numeric", unit: "", steps: [25, 50, 100], order: 1, archived: false },
-  { slug: "writing", name: "Writing", kind: "numeric", unit: "", steps: [1, 5, 10], order: 2, archived: false },
-  { slug: "algebra", name: "Algebra Driven Design", kind: "numeric", unit: "min", steps: [5, 10, 20], order: 3, archived: false },
-  { slug: "retention", name: "Retention", kind: "binary", unit: "", steps: [], order: 4, archived: false },
-  { slug: "fasting", name: "Fasting", kind: "binary", unit: "", steps: [], order: 5, archived: false },
-  { slug: "vocabulary", name: "Vocabulary", kind: "numeric", unit: "words", steps: [5, 10, 25], order: 6, archived: false },
-  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages", steps: [1, 5, 10], order: 7, archived: false },
-  { slug: "bootstrap", name: "Bootstrap", kind: "numeric", unit: "", steps: [10, 30, 60], order: 8, archived: false },
+  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min", steps: [1, 5, 10], order: 0, archived: false, groupSlug: "health" },
+  { slug: "self-remembering", name: "Self Remembering", kind: "numeric", unit: "", steps: [25, 50, 100], order: 1, archived: false, groupSlug: "mind" },
+  { slug: "writing", name: "Writing", kind: "numeric", unit: "", steps: [1, 5, 10], order: 2, archived: false, groupSlug: "work" },
+  { slug: "algebra", name: "Algebra Driven Design", kind: "numeric", unit: "min", steps: [5, 10, 20], order: 3, archived: false, groupSlug: "work" },
+  { slug: "retention", name: "Retention", kind: "binary", unit: "", steps: [], order: 4, archived: false, groupSlug: "health" },
+  { slug: "fasting", name: "Fasting", kind: "binary", unit: "", steps: [], order: 5, archived: false, groupSlug: "health" },
+  { slug: "vocabulary", name: "Vocabulary", kind: "numeric", unit: "words", steps: [5, 10, 25], order: 6, archived: false, groupSlug: "learning" },
+  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages", steps: [1, 5, 10], order: 7, archived: false, groupSlug: "learning" },
+  { slug: "bootstrap", name: "Bootstrap", kind: "numeric", unit: "", steps: [10, 30, 60], order: 8, archived: false, groupSlug: "work" },
+];
+
+
+
+/** Default groups, in display order. */
+export const SEED_GROUPS: Group[] = [
+  { slug: "health", name: "Health", order: 0, archived: false },
+  { slug: "work", name: "Work", order: 1, archived: false },
+  { slug: "learning", name: "Learning", order: 2, archived: false },
+  { slug: "mind", name: "Mind", order: 3, archived: false },
 ];
 
 /**

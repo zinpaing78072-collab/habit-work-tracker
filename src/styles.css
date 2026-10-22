@@ -83,6 +83,32 @@ html, body {
 }
 .card-green { border-left-color: var(--green); }
 
+/* ---- group cards ---- */
+.card-group {
+  border-left-color: var(--accent);
+}
+.card-group.card-collapsed {
+  padding-bottom: 0;
+}
+.card-group .card-head { cursor: pointer; }
+.card-group .card-head:hover { opacity: 0.9; }
+
+/* ---- smaller buttons (reorder in settings) ---- */
+.btn-smaller {
+  min-width: 32px; min-height: 32px; font-size: 14px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--text); border-radius: 8px; cursor: pointer; padding: 0;
+}
+
+/* ---- sub-rows (habits listed under a group in settings) ---- */
+.subrows { margin: 6px 0 0 18px; border-left: 2px solid var(--line); padding-left: 10px; }
+.subhead { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 8px 0 4px; }
+.subrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.subrow .filename { font-size: 13px; }
+.subrow .btn-smaller { margin-right: 4px; }
+.subrow select { flex: 1; min-width: 120px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 13px; }
+
+
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .card-name { font-size: 17px; font-weight: 620; letter-spacing: -0.01em; }
 .card-unit { font-size: 12px; color: var(--muted); }

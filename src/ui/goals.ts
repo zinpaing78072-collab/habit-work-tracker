@@ -1,5 +1,5 @@
-import type { AppState, Goal, Habit } from "../types";
-import { activeHabits, deleteActiveGoal, upsertGoal, upsertHabit } from "../db";
+import type { AppState, Group, Goal, Habit } from "../types";
+import { activeHabits, deleteActiveGoal, setGroupCollapsed, upsertGoal, upsertHabit } from "../db";
 import { completedGoalsFor, progressFor } from "../progress";
 import { formatDayLabel, isValidISODate, todayISORange } from "../day";
 import { el, on } from "../dom";
@@ -10,11 +10,77 @@ export function renderGoals(state: AppState, rerender: (s: AppState) => void, to
   const root = el("div", "view");
   root.append(sectionTitle("Goals", "Every target is a total for its date range, never a per-day amount."));
 
-  for (const habit of activeHabits(state)) {
-    root.append(goalCard(state, habit, rerender, toast));
+  const habits = activeHabits(state);
+  const activeGroups = state.groups.filter((g) => !g.archived).sort((a, b) => a.order - b.order);
+  const collapsed = new Set(state.collapsedGroupSlugs);
+
+  const habitsByGroup = new Map<string, Habit[]>();
+  for (const g of activeGroups) habitsByGroup.set(g.slug, []);
+  const ungrouped: Habit[] = [];
+  for (const h of habits) {
+    if (h.groupSlug && habitsByGroup.has(h.groupSlug)) {
+      habitsByGroup.get(h.groupSlug)!.push(h);
+    } else {
+      ungrouped.push(h);
+    }
+  }
+
+  for (const group of activeGroups) {
+    const groupHabits = habitsByGroup.get(group.slug) ?? [];
+    const isCollapsed = collapsed.has(group.slug);
+    root.append(groupCard(state, group, groupHabits.length, isCollapsed, rerender));
+    if (!isCollapsed) {
+      for (const habit of groupHabits) {
+        root.append(goalCard(state, habit, rerender, toast));
+      }
+    }
+  }
+
+  if (ungrouped.length > 0) {
+    root.append(groupCard(state, { slug: "", name: "Ungrouped", order: 9999, archived: false }, ungrouped.length, false, rerender));
+    for (const habit of ungrouped) {
+      root.append(goalCard(state, habit, rerender, toast));
+    }
   }
 
   return root;
+}
+
+function groupCard(
+  state: AppState,
+  group: Group,
+  habitCount: number,
+  isCollapsed: boolean,
+  rerender: (s: AppState) => void,
+): HTMLElement {
+  const card = el("div", `card card-group${isCollapsed ? " card-collapsed" : ""}`);
+  if (group.slug) {
+    on(card, "click", (ev) => {
+      const target = ev.target as HTMLElement;
+      if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
+      rerender(setGroupCollapsed(state, group.slug));
+    });
+  }
+
+  const head = el("div", "card-head");
+  const nameWrap = el("div", "card-namewrap");
+  nameWrap.append(el("div", "card-name", group.name));
+  nameWrap.append(el("div", "card-unit", `${habitCount} habit${habitCount !== 1 ? "s" : ""}`));
+  head.append(nameWrap);
+
+  if (group.slug) {
+    const toggle = el("button", `btn btn-ghost btn-small ${isCollapsed ? "" : "collapsed-indicator"}`);
+    toggle.textContent = isCollapsed ? "▸" : "▾";
+    toggle.setAttribute("aria-label", isCollapsed ? `Expand ${group.name}` : `Collapse ${group.name}`);
+    on(toggle, "click", (ev) => {
+      ev.stopPropagation();
+      rerender(setGroupCollapsed(state, group.slug));
+    });
+    head.append(toggle);
+  }
+  card.append(head);
+
+  return card;
 }
 
 function goalCard(

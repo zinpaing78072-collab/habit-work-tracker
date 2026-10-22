@@ -1,8 +1,9 @@
-import type { AppState, Habit } from "../types";
-import { activeHabits, setEntry, setEditingHabit } from "../db";
+import type { AppState, Group, Habit } from "../types";
+import { activeHabits, setEntry, setEditingHabit, setGroupCollapsed, upsertHabit } from "../db";
 import { allGreenToday, isLoggedOn, loggedCount, progressFor, todayTone, valueOn } from "../progress";
 import { addDays, daysBetween, formatDayLabel, formatLongDayLabel, logicalToday } from "../day";
-import { el, fmtValue, on } from "../dom";
+import { el, fmtValue, on, slugify } from "../dom";
+import { labelled } from "./history";
 
 /** Today screen: the daily driver (Q1/Q2/Q3/Q9/Q20/Q21/Q22). */
 export function renderToday(state: AppState, rerender: (s: AppState) => void, toast: (m: string) => void): HTMLElement {
@@ -14,6 +15,21 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   const logged = loggedCount(state, date, habits);
   const done = allGreenToday(state, date);
   const editingHabit = state.editingHabitSlug ? habits.find((h) => h.slug === state.editingHabitSlug) : undefined;
+
+  /* ---- group habits ---- */
+  const activeGroups = state.groups.filter((g) => !g.archived).sort((a, b) => a.order - b.order);
+  const collapsed = new Set(state.collapsedGroupSlugs);
+
+  const habitsByGroup = new Map<string, Habit[]>();
+  for (const g of activeGroups) habitsByGroup.set(g.slug, []);
+  const ungrouped: Habit[] = [];
+  for (const h of habits) {
+    if (h.groupSlug && habitsByGroup.has(h.groupSlug)) {
+      habitsByGroup.get(h.groupSlug)!.push(h);
+    } else {
+      ungrouped.push(h);
+    }
+  }
 
   /* ---- date navigation, enabling backdating (Q4/B) ---- */
   const nav = el("div", "datenav");
@@ -49,11 +65,30 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   if (done) count.append(el("span", "count-badge", "All green — good moment to back up"));
   root.append(count);
 
-  for (const habit of habits) root.append(habitCard(state, habit, date, today, rerender, toast, state.editingHabitSlug === habit.slug));
+  /* ---- group cards + habit cards ---- */
+  for (const group of activeGroups) {
+    const groupHabits = habitsByGroup.get(group.slug) ?? [];
+    const isCollapsed = collapsed.has(group.slug);
+    root.append(groupCard(state, group, groupHabits.length, isCollapsed, rerender));
+
+    if (!isCollapsed) {
+      for (const habit of groupHabits) {
+        root.append(habitCard(state, habit, date, today, rerender, toast, state.editingHabitSlug === habit.slug));
+      }
+    }
+  }
+
+  /* ---- Ungrouped section ---- */
+  if (ungrouped.length > 0) {
+    root.append(groupCard(state, { slug: "", name: "Ungrouped", order: 9999, archived: false }, ungrouped.length, false, rerender));
+    for (const habit of ungrouped) {
+      root.append(habitCard(state, habit, date, today, rerender, toast, state.editingHabitSlug === habit.slug));
+    }
+  }
 
   /* ---- edit overlay for tapped card ---- */
   if (editingHabit) {
-    root.append(editingHabitOverlay(state, editingHabit, date, rerender, toast));
+    root.append(editingHabitOverlay(state, editingHabit, rerender, toast));
   }
 
   /* ---- all-green export prompt (Q14) ---- */
@@ -68,6 +103,43 @@ export function renderToday(state: AppState, rerender: (s: AppState) => void, to
   }
 
   return root;
+}
+
+function groupCard(
+  state: AppState,
+  group: Group,
+  habitCount: number,
+  isCollapsed: boolean,
+  rerender: (s: AppState) => void,
+): HTMLElement {
+  const card = el("div", `card card-group${isCollapsed ? " card-collapsed" : ""}`);
+  if (group.slug) {
+    on(card, "click", (ev) => {
+      const target = ev.target as HTMLElement;
+      if (target.tagName === "BUTTON" || target.tagName === "INPUT" || target.tagName === "SELECT") return;
+      rerender(setGroupCollapsed(state, group.slug));
+    });
+  }
+
+  const head = el("div", "card-head");
+  const nameWrap = el("div", "card-namewrap");
+  nameWrap.append(el("div", "card-name", group.name));
+  nameWrap.append(el("div", "card-unit", `${habitCount} habit${habitCount !== 1 ? "s" : ""}`));
+  head.append(nameWrap);
+
+  if (group.slug) {
+    const toggle = el("button", `btn btn-ghost btn-small ${isCollapsed ? "" : "collapsed-indicator"}`);
+    toggle.textContent = isCollapsed ? "▸" : "▾";
+    toggle.setAttribute("aria-label", isCollapsed ? `Expand ${group.name}` : `Collapse ${group.name}`);
+    on(toggle, "click", (ev) => {
+      ev.stopPropagation();
+      rerender(setGroupCollapsed(state, group.slug));
+    });
+    head.append(toggle);
+  }
+  card.append(head);
+
+  return card;
 }
 
 function habitCard(
@@ -108,7 +180,9 @@ function habitCard(
   head.append(badge);
   card.append(head);
 
-  card.append(habitBody(state, habit, date, value, logged, rerender, toast));
+  if (!isEditing) {
+    card.append(habitBody(state, habit, date, value, logged, rerender, toast));
+  }
   card.append(goalStrip(habit, progress));
 
   const pace = paceStrip(habit, progress, today);
@@ -233,41 +307,76 @@ function habitBody(
   return body;
 }
 
-/** Full-height overlay for editing a single habit's entry on a given day. */
+/** Full-height overlay for editing a single habit's definition (name, unit, quick steps). */
 function editingHabitOverlay(
   state: AppState,
   habit: Habit,
-  date: string,
   rerender: (s: AppState) => void,
   toast: (m: string) => void,
 ): HTMLElement {
-  const tone = todayTone(state, habit, date);
-  const value = valueOn(state, habit.slug, date);
-  const logged = isLoggedOn(state, habit.slug, date);
-
   const overlay = el("div", "edit-overlay");
   on(overlay, "click", (ev) => {
     if (ev.target === overlay) rerender(setEditingHabit(state, null));
   });
 
   const panel = el("div", "edit-panel");
-  panel.append(el("h2", "edit-panel-title", habit.name));
-  if (habit.kind === "numeric" && habit.unit) {
-    panel.append(el("div", "edit-panel-unit", habit.unit));
-  }
+  panel.append(el("h2", "edit-panel-title", `Edit ${habit.name}`));
 
-  const badge = el("div", `badge badge-${tone}`);
-  badge.textContent =
-    habit.kind === "binary"
-      ? `${tone === "green" ? "●" : "○"} ${value === 1 ? "Success" : logged ? "Fail" : "Not logged"}`
-      : `${tone === "green" ? "●" : "○"} ${tone === "green" ? "Logged" : "Not logged"}`;
-  panel.append(badge);
+  const name = el("input", "textinput") as HTMLInputElement;
+  name.type = "text";
+  name.value = habit.name;
+  name.setAttribute("aria-label", "Habit name");
+  panel.append(labelled("Name", name));
 
-  panel.append(habitBody(state, habit, date, value, logged, rerender, toast));
+  const unit = el("input", "textinput") as HTMLInputElement;
+  unit.type = "text";
+  unit.value = habit.unit;
+  unit.disabled = habit.kind === "binary";
+  unit.placeholder = habit.kind === "binary" ? "n/a for binary" : "e.g. min, words, pages";
+  unit.setAttribute("aria-label", "Unit");
+  panel.append(labelled("Unit", unit));
 
-  const done = el("button", "btn btn-primary btn-block", "Done") as HTMLButtonElement;
+  const steps = el("input", "textinput") as HTMLInputElement;
+  steps.type = "text";
+  steps.value = habit.steps.join(",");
+  steps.disabled = habit.kind === "binary";
+  steps.placeholder = habit.kind === "binary" ? "n/a for binary" : "e.g. 1,5,10";
+  steps.setAttribute("aria-label", "Quick steps");
+  panel.append(labelled("Quick steps", steps));
+
+  const actions = el("div", "actions");
+
+  const save = el("button", "btn btn-primary btn-block", "Save habit") as HTMLButtonElement;
+  on(save, "click", () => {
+    const trimmed = name.value.trim();
+    if (!trimmed) return toast("Give the habit a name");
+    const nextSlug = trimmed === habit.name ? habit.slug : slugify(trimmed);
+    const next: Habit = {
+      slug: nextSlug,
+      name: trimmed,
+      kind: habit.kind,
+      unit: habit.kind === "numeric" ? unit.value.trim() : "",
+      steps: habit.kind === "numeric"
+        ? steps.value
+            .split(",")
+            .map((s) => Number(s.trim()))
+            .filter((x) => Number.isFinite(x) && x > 0)
+            .sort((a, b) => a - b)
+        : [],
+      order: habit.order,
+      archived: habit.archived,
+      groupSlug: habit.groupSlug,
+    };
+    rerender(upsertHabit(state, next));
+    toast(`${next.name} saved`);
+  });
+  actions.append(save);
+
+  const done = el("button", "btn btn-ghost btn-block", "Done") as HTMLButtonElement;
   on(done, "click", () => rerender(setEditingHabit(state, null)));
-  panel.append(done);
+  actions.append(done);
+
+  panel.append(actions);
 
   overlay.append(panel);
   return overlay;

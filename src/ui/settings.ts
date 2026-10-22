@@ -1,10 +1,10 @@
-import type { AppState, Habit } from "../types";
-import { activeHabits, archiveHabit, defaultState, setSettings, upsertHabit } from "../db";
+import type { AppState, Group, Habit } from "../types";
+import { activeHabits, archiveGroup, archiveHabit, assignHabitToGroup, defaultState, moveGroup, moveHabit, restoreGroup, setSettings, upsertGroup, upsertHabit } from "../db";
 import { hasUnbackedChanges } from "../progress";
 import { applyImport, allCsv, downloadText, habitCsv, parseHabitCsv } from "../csv";
 import { el, formatBytes, formatWhen, on, slugify } from "../dom";
 import { labelled, sectionTitle } from "./history";
-import { SEED_GOALS, SEED_HABITS } from "../seed";
+import { SEED_GOALS, SEED_GROUPS, SEED_HABITS } from "../seed";
 import { estimateStorage, requestPersistence } from "../db";
 
 /** Settings: backup (Q14/Q25), day boundary (Q16-Q18), storage, new habits. */
@@ -136,6 +136,9 @@ export function renderSettings(
   storage.append(el("div", "panel-line", "Install: open in Safari, then Share → Add to Home Screen."));
   root.append(storage);
 
+  /* ---- groups ---- */
+  root.append(groupPanel(state, rerender, toast));
+
   /* ---- new habit ---- */
   root.append(newHabitPanel(state, rerender, toast));
 
@@ -170,10 +173,127 @@ function reseedPanel(
     toast("Local data replaced with the bundled seed");
   });
   panel.append(reseed);
-  panel.append(el("div", "panel-line", `Bundled seed: ${SEED_HABITS.length} habits, ${SEED_GOALS.length} goals.`));
+  panel.append(el("div", "panel-line", `Bundled seed: ${SEED_HABITS.length} habits, ${SEED_GROUPS.length} groups, ${SEED_GOALS.length} goals.`));
   return panel;
 }
 
+
+/**** Groups (Q1–Q8): user-defined, one group per habit, manual reorder. ****/
+function groupPanel(
+  state: AppState,
+  rerender: (s: AppState) => void,
+  toast: (m: string) => void,
+): HTMLElement {
+  const wrap = el("div", "panel");
+  wrap.append(el("div", "panel-name", "Groups"));
+
+  const activeGroups = state.groups.filter((g) => !g.archived).sort((a, b) => a.order - b.order);
+  const archivedGroups = state.groups.filter((g) => g.archived);
+
+  // ---- new group form ----
+  const gname = el("input", "textinput") as HTMLInputElement;
+  gname.type = "text";
+  gname.placeholder = "New group name";
+  gname.setAttribute("aria-label", "New group name");
+  const gcreate = el("button", "btn btn-primary btn-block", "Create group") as HTMLButtonElement;
+  on(gcreate, "click", () => {
+    const trimmed = gname.value.trim();
+    if (!trimmed) return toast("Give the group a name");
+    const slug = slugify(trimmed);
+    if (state.groups.some((g) => g.slug === slug)) return toast("A group with that name already exists");
+    const group: Group = { slug, name: trimmed, order: state.groups.length, archived: false };
+    rerender(upsertGroup(state, group));
+    gname.value = "";
+    toast(`Group "${trimmed}" created`);
+  });
+  const gform = el("div", "form");
+  gform.append(labelled("Group name", gname), gcreate);
+  wrap.append(gform);
+
+  // ---- active groups ----
+  if (activeGroups.length > 0) {
+    wrap.append(el("div", "panel-line", "Active groups (tap a group card on Today/Goals to collapse/expand)"));
+    for (const group of activeGroups) {
+      const row = el("div", "filerow");
+      row.append(el("div", "filename", group.name));
+
+      const moveUp = el("button", "btn btn-ghost btn-small", "↑") as HTMLButtonElement;
+      on(moveUp, "click", () => { rerender(moveGroup(state, group.slug, "up")); toast(`Moved "${group.name}" up`); });
+      row.append(moveUp);
+
+      const moveDown = el("button", "btn btn-ghost btn-small", "↓") as HTMLButtonElement;
+      on(moveDown, "click", () => { rerender(moveGroup(state, group.slug, "down")); toast(`Moved "${group.name}" down`); });
+      row.append(moveDown);
+
+      const archive = el("button", "btn btn-ghost btn-small", "Archive") as HTMLButtonElement;
+      on(archive, "click", () => {
+        if (!window.confirm(`Archive group "${group.name}"? Its habits become ungrouped.`)) return;
+        rerender(archiveGroup(state, group.slug));
+        toast(`Group "${group.name}" archived`);
+      });
+      row.append(archive);
+
+      // Habits in this group with reorder + group change
+      const groupHabits = state.habits
+        .filter((h) => !h.archived && h.groupSlug === group.slug)
+        .sort((a, b) => a.order - b.order);
+      if (groupHabits.length > 0) {
+        const sub = el("div", "subrows");
+        sub.append(el("div", "subhead", "Habits in this group"));
+        for (const h of groupHabits) {
+          const subrow = el("div", "filerow subrow");
+          subrow.append(el("div", "filename", h.name));
+
+          const hup = el("button", "btn btn-ghost btn-smaller", "↑") as HTMLButtonElement;
+          on(hup, "click", () => { rerender(moveHabit(state, h.slug, "up")); });
+          subrow.append(hup);
+
+          const hdown = el("button", "btn btn-ghost btn-smaller", "↓") as HTMLButtonElement;
+          on(hdown, "click", () => { rerender(moveHabit(state, h.slug, "down")); });
+          subrow.append(hdown);
+
+          const chooser = el("select", "textinput") as HTMLSelectElement;
+          const allGroups = [{ slug: null, name: "Ungrouped" }, ...state.groups.filter((g) => !g.archived)];
+          for (const g of allGroups) {
+            const opt = el("option", null, g.name) as HTMLOptionElement;
+            opt.value = g.slug ?? "";
+            if (g.slug === h.groupSlug) opt.selected = true;
+            chooser.append(opt);
+          }
+          on(chooser, "change", () => {
+            const val = chooser.value;
+            rerender(assignHabitToGroup(state, h.slug, val === "" ? null : val));
+            toast(`${h.name} → ${val === "" ? "Ungrouped" : val}`);
+          });
+          subrow.append(chooser);
+
+          sub.append(subrow);
+        }
+        wrap.append(sub);
+      }
+
+      wrap.append(row);
+    }
+  }
+
+  // ---- archived groups ----
+  if (archivedGroups.length > 0) {
+    wrap.append(el("div", "panel-line", "Archived groups"));
+    for (const group of archivedGroups) {
+      const row = el("div", "filerow filerow-archived");
+      row.append(el("div", "filename", group.name));
+      const restore = el("button", "btn btn-ghost btn-small", "Restore") as HTMLButtonElement;
+      on(restore, "click", () => {
+        rerender(restoreGroup(state, group.slug));
+        toast(`Group "${group.name}" restored`);
+      });
+      row.append(restore);
+      wrap.append(row);
+    }
+  }
+
+  return wrap;
+}
 
 /** Custom habits (Q24/B): numeric or binary, with a stable immutable slug. */
 function newHabitPanel(
@@ -242,6 +362,7 @@ function newHabitPanel(
       steps: isNumeric ? (parsedSteps.length > 0 ? parsedSteps : [1]) : [],
       order: state.habits.length,
       archived: false,
+      groupSlug: null,
     };
     rerender(upsertHabit(state, habit));
     toast(`Added ${habit.name}`);

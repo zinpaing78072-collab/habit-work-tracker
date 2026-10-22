@@ -1,6 +1,6 @@
-import type { AppState, Entry, Goal, Habit, Settings, View } from "./types";
+import type { AppState, Entry, Goal, Group, Habit, Settings, View } from "./types";
 import { addDays, DEFAULT_DAY_START_HOUR, logicalToday } from "./day";
-import { SEED_GOALS, SEED_HABITS, buildSeedEntries } from "./seed";
+import { SEED_GOALS, SEED_GROUPS, SEED_HABITS, buildSeedEntries } from "./seed";
 
 /**
  * Minimal typed IndexedDB wrapper. Single object store "state" holding the whole
@@ -41,6 +41,8 @@ export function defaultState(): AppState {
     historyFrom: addDays(today, -29),
     historyTo: today,
     seedNoticeDismissed: false,
+    groups: SEED_GROUPS,
+    collapsedGroupSlugs: [],
   };
 }
 
@@ -60,8 +62,11 @@ export async function loadState(): Promise<AppState> {
       ...defaultState(),
       ...stored,
       settings: { ...defaultState().settings, ...(stored.settings ?? {}) },
+      groups: stored.groups ?? defaultState().groups,
     };
     merged.editingDate = logicalToday(merged.settings.dayStartHour);
+    // All groups start collapsed on every reload (Q11).
+    merged.collapsedGroupSlugs = merged.groups.map((g) => g.slug);
     return merged;
   }
 
@@ -142,6 +147,94 @@ export function setEditingHabit(state: AppState, slug: string | null): AppState 
 
 export function setSettings(state: AppState, patch: Partial<Settings>): AppState {
   return { ...state, settings: { ...state.settings, ...patch } };
+}
+
+
+
+export function upsertGroup(state: AppState, group: Group): AppState {
+  const exists = state.groups.some((g) => g.slug === group.slug);
+  const groups = exists
+    ? state.groups.map((g) => (g.slug === group.slug ? group : g))
+    : [...state.groups, group];
+  return { ...state, groups: groups.sort((a, b) => a.order - b.order) };
+}
+
+export function archiveGroup(state: AppState, slug: string): AppState {
+  // Unassign habits from this group; never hard-delete (data-loss protection).
+  const habits = state.habits.map((h) =>
+    h.groupSlug === slug ? { ...h, groupSlug: null } : h
+  );
+  const groups = state.groups.map((g) =>
+    g.slug === slug ? { ...g, archived: true } : g
+  );
+  return { ...state, habits, groups };
+}
+
+export function restoreGroup(state: AppState, slug: string): AppState {
+  return {
+    ...state,
+    groups: state.groups.map((g) =>
+      g.slug === slug ? { ...g, archived: false } : g
+    ),
+  };
+}
+
+export function moveGroup(state: AppState, slug: string, direction: "up" | "down"): AppState {
+  const active = state.groups.filter((g) => !g.archived).sort((a, b) => a.order - b.order);
+  const idx = active.findIndex((g) => g.slug === slug);
+  if (idx === -1) return state;
+  const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= active.length) return state;
+
+  const a = active[idx];
+  const b = active[targetIdx];
+
+  return {
+    ...state,
+    groups: state.groups.map((g) => {
+      if (g.slug === a.slug) return { ...g, order: b.order };
+      if (g.slug === b.slug) return { ...g, order: a.order };
+      return g;
+    }),
+  };
+}
+
+export function moveHabit(state: AppState, habitSlug: string, direction: "up" | "down"): AppState {
+  const active = state.habits.filter((h) => !h.archived);
+  const groupSlug = active.find((h) => h.slug === habitSlug)?.groupSlug ?? null;
+  const sameGroup = active.filter((h) => h.groupSlug === groupSlug).sort((a, b) => a.order - b.order);
+  const idx = sameGroup.findIndex((h) => h.slug === habitSlug);
+  if (idx === -1) return state;
+  const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= sameGroup.length) return state;
+
+  const a = sameGroup[idx];
+  const b = sameGroup[targetIdx];
+
+  return {
+    ...state,
+    habits: state.habits.map((h) => {
+      if (h.slug === a.slug) return { ...h, order: b.order };
+      if (h.slug === b.slug) return { ...h, order: a.order };
+      return h;
+    }),
+  };
+}
+
+export function setGroupCollapsed(state: AppState, slug: string): AppState {
+  const next = state.collapsedGroupSlugs.includes(slug)
+    ? state.collapsedGroupSlugs.filter((s) => s !== slug)
+    : [...state.collapsedGroupSlugs, slug];
+  return { ...state, collapsedGroupSlugs: next };
+}
+
+export function assignHabitToGroup(state: AppState, habitSlug: string, groupSlug: string | null): AppState {
+  return {
+    ...state,
+    habits: state.habits.map((h) =>
+      h.slug === habitSlug ? { ...h, groupSlug } : h
+    ),
+  };
 }
 
 export function activeHabits(state: AppState): Habit[] {

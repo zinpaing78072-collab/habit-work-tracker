@@ -12,6 +12,16 @@ export type Habit = {
   steps: number[];
   order: number;
   archived: boolean;
+  /** Which group this habit belongs to, or null for ungrouped. */
+  groupSlug: string | null;
+};
+
+/** A named bucket that habits can be sorted into. One group per habit. */
+export type Group = {
+  slug: string;
+  name: string;
+  order: number;
+  archived: boolean;
 };
 
 /** A goal is a target total over a date range. Only one active goal per habit. */
@@ -79,4 +89,8 @@ export type AppState = {
   historyTo: string;
   /** First-run dismissible banner about seeded data (Q23/A). */
   seedNoticeDismissed: boolean;
+  /** All defined groups (archived ones are hidden from lists). */
+  groups: Group[];
+  /** Group slugs currently collapsed on Today/Goals screens; reset on reload. */
+  collapsedGroupSlugs: string[];
 };
