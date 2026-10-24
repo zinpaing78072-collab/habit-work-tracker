@@ -108,6 +108,24 @@ _Avoid_: targets screen, progress screen
 Backup, Day boundary, storage, new habits, and Reseed — everything about the app rather than about the habits.
 _Avoid_: config, preferences, admin
 
+## Groups
+
+**Group**:
+A named bucket that habits can be sorted into — one group per habit. Groups appear as collapsible section cards on the Today and Goals screens; History is unaffected.
+_Avoid_: category, folder, tag, section, list
+
+**Group card**:
+The collapsible section header for a Group on Today or Goals: name, habit count, a ▸/▾ collapse toggle, and a ✎ edit button. Tapping the card (not the buttons) toggles collapse/expand. All groups start collapsed on every reload.
+_Avoid_: accordion, header bar, section title
+
+**Ungrouped**:
+The section for habits with no group assigned — existing habits land here until moved into a group. It is not editable and cannot be archived.
+_Avoid_: miscellaneous, others, default bucket
+
+**Edit overlay**:
+The panel that slides over a card when tapped — the habit edit overlay (name, unit, group chooser, quick steps) on Today, or the group edit overlay (rename) on Today and Goals. Only one overlay is open at a time; tapping the backdrop closes it.
+_Avoid_: modal, popup, dialog, form page
+
 ## Today components
 
 **Habit card**:
