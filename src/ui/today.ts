@@ -212,7 +212,9 @@ function paceStrip(
   if (!progress.hasGoal || progress.expired || progress.remaining <= 0) return null;
   if (habit.kind !== "numeric") return null;
 
-  const remainingDays = daysBetween(today, progress.goal!.endDate) + 1;
+  const startDate = progress.goal!.startDate;
+  const effectiveStart = today > startDate ? today : startDate;
+  const remainingDays = daysBetween(effectiveStart, progress.goal!.endDate) + 1;
   if (remainingDays <= 0) return null;
 
   const pace = Math.ceil(progress.target / remainingDays);
