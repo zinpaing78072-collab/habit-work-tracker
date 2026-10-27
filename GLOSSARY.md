@@ -122,6 +122,10 @@ _Avoid_: accordion, header bar, section title
 The section for habits with no group assigned — existing habits land here until moved into a group. It is not editable and cannot be archived.
 _Avoid_: miscellaneous, others, default bucket
 
+**Group chooser**:
+The dropdown in the Habit edit overlay for assigning a habit to a Group or leaving it Ungrouped. Lists every non-archived Group plus an "Ungrouped" option; saving updates the habit's groupSlug.
+_Avoid_: group selector, group picker, category dropdown
+
 **Edit overlay**:
 The panel that slides over a card when tapped — the habit edit overlay (name, unit, group chooser, quick steps) on Today, or the group edit overlay (rename) on Today and Goals. Only one overlay is open at a time; tapping the backdrop closes it.
 _Avoid_: modal, popup, dialog, form page
@@ -129,7 +133,7 @@ _Avoid_: modal, popup, dialog, form page
 ## Today components
 
 **Habit card**:
-One card per Active habit on the Today screen: name and unit, Status badge, the habit's input controls, and its Goal strip. Its green/red tone reflects the displayed day only.
+One card per Active habit on the Today screen: name and unit, Status badge, the habit's input controls, its Goal strip, and — when applicable — its Pace strip. Its green/red tone reflects the displayed day only.
 _Avoid_: metric card, habit tile, widget
 
 **Status badge**:
@@ -163,6 +167,10 @@ _Avoid_: neutral bar, progress strip, today bar
 **Export prompt**:
 The green-bordered card on the Today screen shown while a day is All green and nothing has been exported yet, offering a jump to Settings.
 _Avoid_: modal, popup, auto-backup reminder
+
+**Pace strip**:
+The neutral line beneath a Habit card's Goal strip showing the daily rate needed to hit the goal by its end date — "Pace: N units/day", where N is the remaining amount divided by the remaining days (rounded up). Shown only for Numeric habits with an unmet, unexpired Active goal; hidden when the goal is met, expired, has no days remaining, or the habit is Binary. Never reuses the today green/red tone; the number uses the accent colour.
+_Avoid_: speed, rate, target, daily quota, velocity
 
 ## History components
 
