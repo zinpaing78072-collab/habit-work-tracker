@@ -2,7 +2,7 @@ import type { AppState, Group, Habit } from "../types";
 import { activeHabits, setEditingGroup, setEntry, setEditingHabit, setGroupCollapsed, upsertGroup, upsertHabit } from "../db";
 import { allGreenToday, isLoggedOn, loggedCount, progressFor, todayTone, valueOn } from "../progress";
 import { addDays, daysBetween, formatDayLabel, formatLongDayLabel, logicalToday } from "../day";
-import { el, fmtValue, on, slugify } from "../dom";
+import { el, fmtValue, on } from "../dom";
 import { labelled } from "./history";
 
 /** Today screen: the daily driver (Q1/Q2/Q3/Q9/Q20/Q21/Q22). */
@@ -380,9 +380,8 @@ function editingHabitOverlay(
   on(save, "click", () => {
     const trimmed = name.value.trim();
     if (!trimmed) return toast("Give the habit a name");
-    const nextSlug = trimmed === habit.name ? habit.slug : slugify(trimmed);
     const next: Habit = {
-      slug: nextSlug,
+      slug: habit.slug,
       name: trimmed,
       kind: habit.kind,
       unit: habit.kind === "numeric" ? unit.value.trim() : "",
