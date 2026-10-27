@@ -215,7 +215,7 @@ function paceStrip(
   const remainingDays = daysBetween(today, progress.goal!.endDate) + 1;
   if (remainingDays <= 0) return null;
 
-  const pace = Math.ceil(progress.remaining / remainingDays);
+  const pace = Math.ceil(progress.target / remainingDays);
 
   const g = el("div", "pace");
   g.append(el("span", null, "Pace:"));

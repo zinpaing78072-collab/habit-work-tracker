@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototype — Cumulative graph + sparklines per habit</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #111; margin: 0; padding: 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .back { background: none; border: none; font-size: 18px; cursor: pointer; color: #666; padding: 4px 8px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #666; margin-top: 4px; }
+  .tabbar { display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 8px; overflow-x: auto; }
+  .tab { padding: 8px 14px; border-radius: 20px; border: 1px solid #ccc; background: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .tab.active { border-color: #2563eb; color: #2563eb; font-weight: 600; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; cursor: pointer; transition: transform .06s; }
+  .card:active { transform: scale(0.99); }
+  .habit-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .habit-name { font-weight: 600; font-size: 16px; }
+  .habit-meta { font-size: 12px; color: #666; margin-top: 2px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .chart-panel { background: #fafafa; border-radius: 10px; padding: 12px; border: 1px solid #f0f0f0; }
+  .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; margin-bottom: 8px; font-weight: 600; }
+  .cum-chart { position: relative; height: 130px; margin-bottom: 8px; }
+  .cum-axis-y { position: absolute; left: 36px; top: 6px; bottom: 26px; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #999; pointer-events: none; }
+  .cum-axis-x { position: absolute; left: 36px; right: 10px; bottom: 6px; display: flex; justify-content: space-between; font-size: 10px; color: #999; pointer-events: none; }
+  .cum-svg { position: absolute; left: 36px; right: 10px; top: 6px; bottom: 26px; }
+  .spark { height: 52px; display: flex; align-items: flex-end; gap: 2px; margin-bottom: 8px; }
+  .spark-bar { width: 10px; border-radius: 3px 3px 0 0; background: #ddd; }
+  .spark-bar.today { background: #2563eb; }
+  .spark-bar.zero { background: #eee; }
+  .spark-label { font-size: 10px; color: #999; margin-bottom: 4px; }
+  .summary { display: flex; gap: 16px; font-size: 13px; margin-top: 10px; }
+  .summary-item { color: #666; }
+  .summary-item b { color: #111; display: block; font-size: 16px; }
+  .status { font-size: 12px; font-weight: 600; margin-top: 8px; }
+  .status.on-track { color: #15803d; }
+  .status.behind { color: #dc2626; }
+  .status.met { color: #7c3aed; }
+  .hint { margin-top: 16px; font-size: 12px; color: #888; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <button class="back">‹</button>
+  <div>
+    <h1>Trends</h1>
+    <div class="subtitle">Progress per habit · tap a card for detail</div>
+  </div>
+</header>
+
+<div class="tabbar">
+  <div class="tab active">This month</div>
+  <div class="tab">Last 30 days</div>
+  <div class="tab">This year</div>
+</div>
+
+<div id="list"></div>
+
+<div class="hint">Prototype — each habit card shows a cumulative goal graph (left) and a weekly sparkline (right). Mock data is consistent across all prototypes.</div>
+
+<script>
+
+const HABITS = [
+  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min", group: "Health", goalTarget: 600, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "writing", name: "Writing", kind: "numeric", unit: "words", group: "Work", goalTarget: 3000, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages", group: "Learning", goalTarget: 150, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "fasting", name: "Fasting", kind: "binary", group: "Health", goalTarget: 20, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "vocabulary", name: "Vocabulary", kind: "numeric", unit: "words", group: "Learning", goalTarget: 500, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+];
+
+const NOW = new Date(); NOW.setHours(12, 0, 0, 0);
+const days30 = Array.from({ length: 30 }, (_, i) => {
+  const d = new Date(NOW); d.setDate(NOW.getDate() - 29 + i);
+  return d.toISOString().slice(0, 10);
+});
+
+function randomEntries(habit, days) {
+  return days.map(date => {
+    let value;
+    if (habit.kind === "binary") value = Math.random() < 0.7 ? 1 : 0;
+    else value = Math.random() < 0.8 ? Math.floor(Math.random() * (habit.slug === "meditation" ? 30 : 300) + 1) : 0;
+    return { date, value };
+  });
+}
+
+function cumulative(entries) {
+  let c = 0;
+  return entries.map(e => { c += e.value; return { date: e.date, cum: c }; });
+}
+
+function weekBuckets(entries) {
+  const buckets = [];
+  for (let w = 3; w >= 0; w--) {
+    const weekStart = new Date(NOW);
+    weekStart.setDate(NOW.getDate() - (NOW.getDay() + 7 * w + 7) % 7 || NOW.getDate() - 7 * w);
+    weekStart.setHours(0,0,0,0);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const ws = weekStart.toISOString().slice(0,10);
+    const we = weekEnd.toISOString().slice(0,10);
+    let sum = 0;
+    for (const e of entries) { if (e.date >= ws && e.date <= we) sum += e.value; }
+    buckets.push({ label: `W${4-w}`, sum, days: 7 });
+  }
+  return buckets;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  for (const habit of HABITS) {
+    const entries = randomEntries(habit, days30);
+    const cum = cumulative(entries);
+    const currentCum = cum[cum.length - 1].cum;
+    const weeks = weekBuckets(entries);
+    const maxCum = Math.max(habit.goalTarget, ...cum.map(c => c.cum), 1);
+    const maxWeek = Math.max(...weeks.map(w => w.sum), 1);
+
+    const chartW = 240;
+    const xStep = (chartW - 46) / (days30.length - 1);
+    const points = cum.map((c, i) => {
+      const x = 36 + i * xStep;
+      const y = 130 - 24 - (c.cum / maxCum) * (130 - 36);
+      return { x, y };
+    });
+    const pathD = points.map(p => (p === points[0] ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join("");
+    const targetY = 130 - 24 - (habit.goalTarget / maxCum) * (130 - 36);
+    const todayIdx = days30.length - 1;
+    const onTrack = currentCum >= habit.goalTarget * (todayIdx + 1) / days30.length;
+    const met = currentCum >= habit.goalTarget;
+
+    const sparkMax = Math.max(maxWeek, 1);
+    const barsHtml = weeks.map((w, i) => {
+      const h = Math.max(3, Math.round((w.sum / sparkMax) * 40));
+      const cls = "spark-bar" + (i === weeks.length - 1 ? " today" : "") + (w.sum === 0 ? " zero" : "");
+      return `<div class="${cls}" style="height:${h}px" title="${w.label}: ${w.sum}"></div>`;
+    }).join("");
+    const card = document.createElement("div");
+    card.className = "card";
+    card.onclick = () => alert(`Detail for ${habit.name}`);
+    card.innerHTML = `
+      <div class="habit-head">
+        <div>
+          <div class="habit-name">${habit.name}</div>
+          <div class="habit-meta">${habit.kind} · ${habit.unit} · ${habit.group}</div>
+        </div>
+        <div style="font-size:11px;color:#999;">${habit.goalStart.slice(5)} → ${habit.goalEnd.slice(5)}</div>
+      </div>
+      <div class="charts">
+        <div class="chart-panel">
+          <div class="panel-title">Cumulative vs goal</div>
+          <div class="cum-chart">
+            <div class="cum-axis-y">
+              <div>${Math.round(maxCum)}</div>
+              <div style="text-align:center">${Math.round(maxCum/2)}</div>
+              <div>0</div>
+            </div>
+            <svg class="cum-svg" width="${chartW}" height="130" viewBox="0 0 ${chartW} 130" preserveAspectRatio="none">
+              <path fill="#eff6ff" d="M36,106 ${pathD} L${points[points.length-1].x},106 Z" />
+              <path fill="none" stroke="#2563eb" stroke-width="2" d="${pathD}" />
+              <line x1="36" y1="${targetY}" x2="${36+(days30.length-1)*xStep}" y2="${targetY}" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4 4" />
+              ${points.map(p => `<circle class="dot" cx="${p.x}" cy="${p.y}" />`).join('')}
+            </svg>
+            <div class="cum-axis-x">
+              ${days30.filter((_,i)=>i%7===0).map((d,i)=>{
+                const x=36+i*7*xStep;
+                return `<div style="position:absolute;left:${x}px;transform:translateX(-50%);">${d.slice(5)}</div>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="summary">
+            <div class="summary-item"><b>${currentCum}</b><span>${habit.unit}</span></div>
+            <div class="summary-item"><b>${habit.goalTarget}</b><span>target</span></div>
+          </div>
+          <div class="status ${met ? 'met' : onTrack ? 'on-track' : 'behind'}">${met ? 'Goal met' : onTrack ? 'On track' : 'Behind pace'}</div>
+        </div>
+        <div class="chart-panel">
+          <div class="panel-title">Weekly sparkline</div>
+          <div class="spark-label">Last 4 weeks · total ${habit.unit}</div>
+          <div class="spark">${barsHtml}</div>
+          <div class="summary">
+            ${weeks.map(w => `<div class="summary-item"><b>${w.sum}</b><span>${w.label}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+}
+
+render();
+
+</script>
+</body>
+</html>

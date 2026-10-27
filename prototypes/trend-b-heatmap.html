@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototype B — Completion-rate heatmap</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #111; margin: 0; padding: 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .back { background: none; border: none; font-size: 18px; cursor: pointer; color: #666; padding: 4px 8px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #666; margin-top: 4px; }
+  .selector { margin-bottom: 14px; }
+  select { font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .habit-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .habit-sub { font-size: 12px; color: #666; margin-bottom: 14px; }
+  .heatmap { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+  .cell { width: 28px; height: 28px; border-radius: 6px; background: #ebedf0; cursor: default; position: relative; }
+  .cell.logged { background: #22c55e; }
+  .cell.zero { background: #fda4af; } /* explicit 0 / fail */
+  .cell.today { outline: 2px solid #111; outline-offset: -2px; }
+  .cell-label { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #666; white-space: nowrap; }
+  .weekday { font-size: 10px; color: #999; text-align: center; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stats { display: flex; gap: 16px; font-size: 13px; color: #666; }
+  .stats b { color: #111; display: block; font-size: 15px; }
+  .hint { margin-top: 16px; font-size: 12px; color: #888; line-height: 1.5; }
+  .legend { display: flex; gap: 10px; font-size: 11px; margin-top: 8px; }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .lg { width: 10px; height: 10px; border-radius: 4px; background: #22c55e; }
+  .lz { width: 10px; height: 10px; border-radius: 4px; background: #fda4af; }
+  .ln { width: 10px; height: 10px; border-radius: 4px; background: #ebedf0; }
+</style>
+</head>
+<body>
+<header>
+  <button class="back">‹</button>
+  <div>
+    <h1>Heatmap</h1>
+    <div class="subtitle">Logged days for one habit · last 12 weeks</div>
+  </div>
+</header>
+
+<div class="selector">
+  <label for="habit">Habit</label>
+  <select id="habit"></select>
+</div>
+
+<div class="card" id="card"></div>
+
+<div class="hint">Prototype B — calendar heatmap. Green = logged, red = explicit zero/fail, grey = not logged. Same mock data across all four prototypes.</div>
+
+<script>
+const HABITS = [
+  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min" },
+  { slug: "writing", name: "Writing", kind: "numeric", unit: "words" },
+  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages" },
+  { slug: "fasting", name: "Fasting", kind: "binary" },
+  { slug: "vocabulary", name: "Vocabulary", kind: "numeric", unit: "words" },
+];
+
+const NOW = new Date(); NOW.setHours(12, 0, 0, 0);
+const days = Array.from({ length: 84 }, (_, i) => {
+  const d = new Date(NOW); d.setDate(NOW.getDate() - 83 + i);
+  return d.toISOString().slice(0, 10);
+});
+
+function randomEntries(habit) {
+  return days.map(date => {
+    let value;
+    if (habit.kind === "binary") value = Math.random() < 0.7 ? 1 : 0;
+    else value = Math.random() < 0.8 ? Math.floor(Math.random() * 200 + 1) : 0;
+    return { date, value };
+  });
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function render(habitSlug) {
+  const habit = HABITS.find(h => h.slug === habitSlug);
+  const entries = randomEntries(habit);
+  const entryByDate = Object.fromEntries(entries.map(e => [e.date, e.value]));
+  const loggedCount = entries.filter(e => e.value > 0).length;
+  const total = entries.reduce((s, e) => s + e.value, 0);
+
+  const select = document.getElementById("habit");
+  select.innerHTML = HABITS.map(h => `<option value="${h.slug}" ${h.slug === habitSlug ? 'selected' : ''}>${h.name}</option>`).join("");
+  select.onchange = (e) => render(e.target.value);
+
+  const card = document.getElementById("card");
+  card.innerHTML = `
+    <div class="habit-title">${habit.name}</div>
+    <div class="habit-sub">${habit.kind} · ${habit.unit || '—'} · ${loggedCount} / 84 days logged</div>
+    <div class="weekdays">${WEEKDAYS.map(d => `<div class="weekday">${d}</div>`).join('')}</div>
+    <div class="heatmap">
+      ${entries.map((e, i) => {
+        const dateObj = new Date(e.date + "T00:00:00");
+        const dayName = WEEKDAYS[dateObj.getDay()];
+        let cls = "cell";
+        if (e.value === 0) cls += " zero";
+        else if (e.value > 0) cls += " logged";
+        if (i === entries.length - 1) cls += " today";
+        return `<div class="${cls}" title="${e.date}: ${e.value}${habit.unit || ''}">
+                  <div class="cell-label">${e.date.slice(5)}</div>
+                </div>`;
+      }).join('')}
+    </div>
+    <div class="stats">
+      <div><b>${loggedCount}</b><span>days logged</span></div>
+      <div><b>${total}</b><span>${habit.unit || 'total'}</span></div>
+      <div><b>${Math.round((loggedCount / 84) * 100)}%</b><span>completion</span></div>
+    </div>
+    <div class="legend">
+      <span><div class="lg"></div>Logged</span>
+      <span><div class="lz"></div>Zero / Fail</span>
+      <span><div class="ln"></div>Not logged</span>
+    </div>
+  `;
+}
+
+document.getElementById("habit").value = HABITS[0].slug;
+render(HABITS[0].slug);
+</script>
+</body>
+</html>

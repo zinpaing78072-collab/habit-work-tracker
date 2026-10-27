@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototype D — Aggregate dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #111; margin: 0; padding: 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .back { background: none; border: none; font-size: 18px; cursor: pointer; color: #666; padding: 4px 8px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #666; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .stat { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .stat .label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .stat .value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .delta { font-size: 12px; margin-top: 4px; }
+  .delta.up { color: #15803d; } .delta.down { color: #dc2626; } .delta.neutral { color: #666; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; }
+  .card-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+  .row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f2f2f2; font-size: 13px; }
+  .row:last-child { border-bottom: none; }
+  .row b { color: #111; }
+  .chip { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #e5e7eb; color: #374151; }
+  .chip.green { background: #dcfce7; color: #15803d; }
+  .chip.gold { background: #fef3c7; color: #92400e; }
+  .hint { margin-top: 16px; font-size: 12px; color: #888; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <button class="back">‹</button>
+  <div>
+    <h1>Dashboard</h1>
+    <div class="subtitle">This week · all habits</div>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="stat">
+    <div class="label">Days logged</div>
+    <div class="value" id="v-logged">—</div>
+    <div class="delta up" id="d-logged">+2 vs last week</div>
+  </div>
+  <div class="stat">
+    <div class="label">All-green days</div>
+    <div class="value" id="v-allgreen">—</div>
+    <div class="delta neutral" id="d-allgreen">same</div>
+  </div>
+  <div class="stat">
+    <div class="label">Active habits</div>
+    <div class="value" id="v-habits">—</div>
+    <div class="delta neutral" id="d-habits">5 total</div>
+  </div>
+  <div class="stat">
+    <div class="label">Longest streak</div>
+    <div class="value" id="v-streak">—</div>
+    <div class="delta up" id="d-streak">Writing: 12 days</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Most logged this week</div>
+  <div id="ranking"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Goals at a glance</div>
+  <div id="goals"></div>
+</div>
+
+<div class="hint">Prototype D — aggregate health check. Read-only summary panels, no per-day detail. Same mock data across all four prototypes.</div>
+
+<script>
+
+const HABITS = [
+  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min", group: "Health" },
+  { slug: "writing", name: "Writing", kind: "numeric", unit: "words", group: "Work" },
+  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages", group: "Learning" },
+  { slug: "fasting", name: "Fasting", kind: "binary", group: "Health" },
+  { slug: "vocabulary", name: "Vocabulary", kind: "numeric", unit: "words", group: "Learning" },
+];
+
+const NOW = new Date(); NOW.setHours(12, 0, 0, 0);
+const days = Array.from({ length: 7 }, (_, i) => {
+  const d = new Date(NOW); d.setDate(NOW.getDate() - 6 + i);
+  return d.toISOString().slice(0, 10);
+});
+
+function randomEntries(habit) {
+  return days.map(date => {
+    let value;
+    if (habit.kind === "binary") value = Math.random() < 0.7 ? 1 : 0;
+    else value = Math.random() < 0.8 ? Math.floor(Math.random() * 200 + 1) : 0;
+    return { date, value };
+  });
+}
+
+function render() {
+  const allEntries = {};
+  for (const h of HABITS) allEntries[h.slug] = randomEntries(h);
+  const totalLoggedDays = Object.values(allEntries).flat().filter(e => e.value > 0).length;
+  const allGreenDays = days.filter(date =>
+    HABITS.every(h => allEntries[h.slug].find(e => e.date === date)?.value > 0)
+  ).length;
+  const maxStreak = Math.max(...HABITS.map(h => {
+    const es = allEntries[h.slug];
+    let s = 0, best = 0;
+    for (const e of es) { if (e.value > 0) { s++; best = Math.max(best, s); } else s = 0; }
+    return best;
+  }));
+  document.getElementById("v-logged").textContent = totalLoggedDays;
+  document.getElementById("v-allgreen").textContent = allGreenDays;
+  document.getElementById("v-habits").textContent = HABITS.length;
+  document.getElementById("v-streak").textContent = maxStreak + " days";
+  const ranking = HABITS.map(h => ({
+    name: h.name,
+    logged: allEntries[h.slug].filter(e => e.value > 0).length,
+    total: allEntries[h.slug].reduce((s, e) => s + e.value, 0),
+  })).sort((a, b) => b.logged - a.logged);
+  document.getElementById("ranking").innerHTML = ranking.map((h, i) => `
+    <div class="row">
+      <span><b>${i + 1}.</b> ${h.name}</span>
+      <span>${h.logged} days · ${h.total}</span>
+    </div>
+  `).join("");
+  const goals = [
+    { habit: "Meditation", target: 600, current: 412, unit: "min", status: "behind" },
+    { habit: "Writing", target: 3000, current: 2850, unit: "words", status: "on-track" },
+    { habit: "Reading", target: 150, current: 150, unit: "pages", status: "met" },
+  ];
+  document.getElementById("goals").innerHTML = goals.map(g => `
+    <div class="row">
+      <span>${g.habit}</span>
+      <span>${g.current} / ${g.target} ${g.unit} <span class="chip ${g.status === 'met' ? 'green' : g.status === 'on-track' ? 'gold' : ''}">${g.status === 'met' ? 'Met' : g.status === 'on-track' ? 'On track' : 'Behind'}</span></span>
+    </div>
+  `).join("");
+}
+
+render();
+
+</script>
+</body>
+</html>

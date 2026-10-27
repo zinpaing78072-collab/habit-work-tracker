@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototype C — Goal burndown / cumulative progress</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #111; margin: 0; padding: 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .back { background: none; border: none; font-size: 18px; cursor: pointer; color: #666; padding: 4px 8px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #666; margin-top: 4px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; }
+  .habit-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .goal-meta { font-size: 12px; color: #666; margin-bottom: 14px; }
+  .chart { position: relative; height: 140px; margin-bottom: 10px; }
+  .axis-y { position: absolute; left: 40px; top: 8px; bottom: 32px; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #999; pointer-events: none; }
+  .axis-x { position: absolute; left: 40px; right: 12px; bottom: 10px; display: flex; justify-content: space-between; font-size: 10px; color: #999; pointer-events: none; }
+  .line { position: absolute; left: 40px; right: 12px; top: 8px; bottom: 32px; }
+  .line-path { fill: none; stroke: #2563eb; stroke-width: 2.5; }
+  .target-line { fill: none; stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 4 4; }
+  .area { fill: #eff6ff; }
+  .dot { fill: #2563eb; }
+  .status { display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px; }
+  .status b { color: #111; }
+  .on-track { color: #15803d; font-weight: 600; }
+  .behind { color: #dc2626; font-weight: 600; }
+  .selector { margin-bottom: 14px; }
+  select { font-size: 14px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+  .hint { margin-top: 16px; font-size: 12px; color: #888; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <button class="back">‹</button>
+  <div>
+    <h1>Goal progress</h1>
+    <div class="subtitle">Cumulative logged vs target · active goals only</div>
+  </div>
+</header>
+
+<div class="selector">
+  <label for="habit">Habit with goal</label>
+  <select id="habit"></select>
+</div>
+
+<div id="cards"></div>
+
+<div class="hint">Prototype C — cumulative progress line vs target line. Red dashed = goal target. Same mock data across all four prototypes.</div>
+
+<script>
+const HABITS = [
+  { slug: "meditation", name: "Meditation", kind: "numeric", unit: "min", goalTarget: 600, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "writing", name: "Writing", kind: "numeric", unit: "words", goalTarget: 3000, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "reading", name: "Reading", kind: "numeric", unit: "pages", goalTarget: 150, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+  { slug: "fasting", name: "Fasting", kind: "binary", goalTarget: 20, goalStart: "2026-09-01", goalEnd: "2026-09-30" },
+];
+
+const NOW = new Date(); NOW.setHours(12, 0, 0, 0);
+const days = Array.from({ length: 30 }, (_, i) => {
+  const d = new Date(NOW); d.setDate(NOW.getDate() - 29 + i);
+  return d.toISOString().slice(0, 10);
+});
+
+function randomEntries(habit) {
+  return days.map(date => {
+    let value;
+    if (habit.kind === "binary") value = Math.random() < 0.7 ? 1 : 0;
+    else value = Math.random() < 0.8 ? Math.floor(Math.random() * (habit.slug === "meditation" ? 30 : 200) + 1) : 0;
+    return { date, value };
+  });
+}
+
+function render(habitSlug) {
+  const habit = HABITS.find(h => h.slug === habitSlug);
+  const entries = randomEntries(habit);
+  let cum = 0;
+  const cumulative = entries.map(e => { cum += e.value; return { date: e.date, cum }; });
+  const start = new Date(habit.goalStart + "T00:00:00");
+  const end = new Date(habit.goalEnd + "T00:00:00");
+  const totalDays = Math.ceil((end - start) / 86400000) + 1;
+  const todayIdx = days.length - 1;
+  const container = document.getElementById("cards");
+  container.innerHTML = "";
+  const select = document.createElement("select");
+  select.innerHTML = HABITS.map(h => `<option value="${h.slug}" ${h.slug === habitSlug ? 'selected' : ''}>${h.name}</option>`).join("");
+  select.onchange = (e) => render(e.target.value);
+  const wrapper = document.createElement("div");
+  wrapper.className = "card";
+  const maxVal = Math.max(habit.goalTarget, ...cumulative.map(c => c.cum), 1);
+  const chartW = 320;
+  const xStep = (chartW - 52) / (totalDays - 1);
+  const points = cumulative.map((c, i) => {
+    const x = 40 + i * xStep;
+    const y = 140 - 32 - (c.cum / maxVal) * (140 - 40);
+    return { x, y };
+  });
+  const pathD = points.map(p => (p === points[0] ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join("");
+  const targetY = 140 - 32 - (habit.goalTarget / maxVal) * (140 - 40);
+  const currentCum = cumulative[cumulative.length - 1].cum;
+  const onTrack = currentCum >= habit.goalTarget * (todayIdx + 1) / totalDays;
+  wrapper.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div class="habit-title">${habit.name}</div>
+      <button class="back" style="font-size:16px;padding:2px 6px;">←</button>
+    </div>
+    <div class="goal-meta">Goal: ${habit.goalTarget} ${habit.unit} · ${habit.goalStart} → ${habit.goalEnd} · Day ${todayIdx + 1} of ${totalDays}</div>
+    <div class="chart">
+      <div class="axis-y">
+        <div>${Math.round(maxVal)}</div>
+        <div style="text-align:center">${Math.round(maxVal / 2)}</div>
+        <div>0</div>
+      </div>
+      <svg class="line" width="${chartW}" height="140" viewBox="0 0 ${chartW} 140" preserveAspectRatio="none">
+        <path class="area" d="M40,108 ${pathD} L${points[points.length-1].x},108 Z" />
+        <path class="line-path" d="${pathD}" />
+        <line class="target-line" x1="40" y1="${targetY}" x2="${40 + (totalDays-1)*xStep}" y2="${targetY}" />
+        ${points.map(p => `<circle class="dot" cx="${p.x}" cy="${p.y}" r="2.5" />`).join('')}
+      </svg>
+      <div class="axis-x">
+        ${days.filter((_, i) => i % 7 === 0).map((d, i) => {
+          const x = 40 + i * 7 * xStep;
+          return `<div style="position:absolute;left:${x}px;transform:translateX(-50%);">${d.slice(5)}</div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="status">
+      <div><b>${currentCum}</b> / ${habit.goalTarget} ${habit.unit}</div>
+      <div class="${onTrack ? 'on-track' : 'behind'}">${onTrack ? 'On track' : 'Behind pace'}</div>
+    </div>
+  `;
+  const selDiv = document.createElement("div");
+  selDiv.className = "selector";
+  selDiv.innerHTML = `<label for="habit">Habit with goal</label>`;
+  selDiv.appendChild(select);
+  container.appendChild(selDiv);
+  container.appendChild(wrapper);
+}
+
+render(HABITS[0].slug);
+</script>
+</body>
+</html>
