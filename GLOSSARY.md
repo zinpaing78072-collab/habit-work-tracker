@@ -169,7 +169,7 @@ The green-bordered card on the Today screen shown while a day is All green and n
 _Avoid_: modal, popup, auto-backup reminder
 
 **Pace strip**:
-The neutral line beneath a Habit card's Goal strip showing the daily rate needed to hit the goal by its end date — "Pace: N units/day", where N is the target divided by the remaining days (rounded up). Based on the goal's full target, not the remaining amount, so it only changes when the day changes — not when new entries are added. Shown only for Numeric habits with an unmet, unexpired Active goal; hidden when the goal is met, expired, has no days remaining, or the habit is Binary. Never reuses the today green/red tone; the number uses the accent colour.
+The neutral line beneath a Habit card's Goal strip showing the daily rate needed to hit the goal by its end date — "Pace: N units/day", where N is the remaining amount (target minus the total logged at the start of today) divided by the remaining days (rounded up). Frozen during the day so it does not change when new entries are added; recalculates only when the day changes. Shown only for Numeric habits with an unmet, unexpired Active goal; hidden when the goal is met, expired, has no days remaining, or the habit is Binary. Never reuses the today green/red tone; the number uses the accent colour.
 _Avoid_: speed, rate, target, daily quota, velocity
 
 ## History components

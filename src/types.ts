@@ -84,6 +84,8 @@ export type AppState = {
   editingDate: string;
   /** Habit slug currently being edited via card tap; null when no overlay. */
   editingHabitSlug: string | null;
+  /** Per-habit totals captured at the start of the logical day, used to freeze the pace strip during the day. */
+  dayStartTotals: { date: string; totals: Record<string, number> } | null;
   /** Group slug currently being edited via group card; null when no overlay. */
   editingGroupSlug: string | null;
   /** History range filter (persisted so it survives re-renders). */

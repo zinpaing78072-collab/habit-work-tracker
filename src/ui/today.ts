@@ -196,7 +196,7 @@ function habitCard(
   }
   card.append(goalStrip(habit, progress));
 
-  const pace = paceStrip(habit, progress, today);
+  const pace = paceStrip(state, habit, progress, today);
   if (pace) card.append(pace);
   return card;
 }
@@ -205,11 +205,12 @@ function habitCard(
  *  Hidden when there is no active goal, the goal is expired/met, or no days remain.
  *  Neutral styling — never reuses today's green/red accent. */
 function paceStrip(
+  state: AppState,
   habit: Habit,
   progress: ReturnType<typeof progressFor>,
   today: string,
 ): HTMLElement | null {
-  if (!progress.hasGoal || progress.expired || progress.remaining <= 0) return null;
+  if (!progress.hasGoal || progress.expired) return null;
   if (habit.kind !== "numeric") return null;
 
   const startDate = progress.goal!.startDate;
@@ -217,7 +218,12 @@ function paceStrip(
   const remainingDays = daysBetween(effectiveStart, progress.goal!.endDate) + 1;
   if (remainingDays <= 0) return null;
 
-  const pace = Math.ceil(progress.target / remainingDays);
+  // Use frozen total from start of day so pace doesn't change when entries are added.
+  const frozenTotal = state.dayStartTotals?.totals[habit.slug] ?? progress.total;
+  const remaining = Math.max(progress.target - frozenTotal, 0);
+  if (remaining <= 0) return null;
+
+  const pace = Math.ceil(remaining / remainingDays);
 
   const g = el("div", "pace");
   g.append(el("span", null, "Pace:"));

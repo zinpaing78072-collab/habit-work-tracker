@@ -1,6 +1,6 @@
 import "./styles.css";
 import type { AppState, View } from "./types";
-import { loadState, saveState, setView } from "./db";
+import { loadState, saveState, setView, ensureDayStartTotals } from "./db";
 import { logicalToday } from "./day";
 import { allGreenToday, hasUnbackedChanges } from "./progress";
 import { el, on } from "./dom";
@@ -117,7 +117,7 @@ async function boot(): Promise<void> {
   window.setInterval(() => {
     const today = logicalToday(state.settings.dayStartHour);
     if (state.view === "today" && state.editingDate !== today && !state.seedNoticeDismissed) {
-      update({ ...state, editingDate: today });
+      update(ensureDayStartTotals({ ...state, editingDate: today }));
     }
   }, 60_000);
 
@@ -127,7 +127,7 @@ async function boot(): Promise<void> {
     const today = logicalToday(state.settings.dayStartHour);
     if (state.view === "today" && state.editingDate !== today && document.visibilityState === "visible") {
       const wasShowingToday = true;
-      if (wasShowingToday) update({ ...state, editingDate: today });
+      if (wasShowingToday) update(ensureDayStartTotals({ ...state, editingDate: today }));
     }
   });
 }

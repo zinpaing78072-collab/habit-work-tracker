@@ -39,6 +39,7 @@ export function defaultState(): AppState {
     editingDate: today,
     editingHabitSlug: null,
     editingGroupSlug: null,
+    dayStartTotals: null,
     historyFrom: addDays(today, -29),
     historyTo: today,
     seedNoticeDismissed: false,
@@ -68,10 +69,11 @@ export async function loadState(): Promise<AppState> {
     merged.editingDate = logicalToday(merged.settings.dayStartHour);
     // All groups start collapsed on every reload (Q11).
     merged.collapsedGroupSlugs = merged.groups.map((g) => g.slug);
-    return merged;
+    // Ensure day-start totals are captured for today.
+    return ensureDayStartTotals(merged);
   }
 
-  const fresh = defaultState();
+  const fresh = ensureDayStartTotals(defaultState());
   await saveState(fresh);
   return fresh;
 }
@@ -240,6 +242,27 @@ export function assignHabitToGroup(state: AppState, habitSlug: string, groupSlug
       h.slug === habitSlug ? { ...h, groupSlug } : h
     ),
   };
+}
+
+export function ensureDayStartTotals(state: AppState): AppState {
+  const today = logicalToday(state.settings.dayStartHour);
+  if (state.dayStartTotals && state.dayStartTotals.date === today) {
+    return state;
+  }
+  // Compute totals for all habits at the start of today.
+  const totals: Record<string, number> = {};
+  for (const h of state.habits) {
+    const goal = state.goals.find((g) => g.habitSlug === h.slug && g.active);
+    if (!goal) {
+      totals[h.slug] = 0;
+      continue;
+    }
+    const scoped = state.entries.filter(
+      (e) => e.habitSlug === h.slug && e.date >= goal.startDate && e.date <= goal.endDate,
+    );
+    totals[h.slug] = scoped.reduce((sum, e) => sum + e.value, 0);
+  }
+  return { ...state, dayStartTotals: { date: today, totals } };
 }
 
 export function activeHabits(state: AppState): Habit[] {
