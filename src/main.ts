@@ -7,6 +7,7 @@ import { el, on } from "./dom";
 import { renderToday } from "./ui/today";
 import { renderHistory } from "./ui/history";
 import { renderGoals } from "./ui/goals";
+import { renderProgress } from "./ui/progress";
 import { renderSettings } from "./ui/settings";
 
 const appEl = document.getElementById("app");
@@ -42,6 +43,7 @@ const TABS: { id: View; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "history", label: "History" },
   { id: "goals", label: "Goals" },
+  { id: "progress", label: "Progress" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -68,6 +70,7 @@ function render(): void {
   if (state.view === "today") main.append(renderToday(state, update, toast));
   else if (state.view === "history") main.append(renderHistory(state, update));
   else if (state.view === "goals") main.append(renderGoals(state, update, toast));
+  else if (state.view === "progress") main.append(renderProgress(state, update, toast));
   else main.append(renderSettings(state, update, toast));
   app.append(main);
 

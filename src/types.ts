@@ -72,7 +72,7 @@ export type Settings = {
   lastExportAt: number | null;
 };
 
-export type View = "today" | "history" | "goals" | "settings";
+export type View = "today" | "history" | "goals" | "progress" | "settings";
 
 export type AppState = {
   habits: Habit[];
